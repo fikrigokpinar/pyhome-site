@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PyHome — Yönetici Paneli</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- Bu sayfa öğrenci arayüzünün aksine kaydırılabilir olmalı (style.css html/body'yi
+       overflow:hidden yapar; SPA öğrenci düzeni için). Yerel geçersiz kılma: -->
+  <style>html, body { overflow: auto; height: auto; min-height: 100%; }</style>
+</head>
+<body class="yon-govde">
+  <!-- Giriş ekranı -->
+  <div class="giris" id="giris">
+    <form class="giris-kart" id="giris-form">
+      <div class="giris-logo">PyHome<span class="nokta">.</span></div>
+      <p class="giris-alt">Yönetici Paneli</p>
+      <label for="giris-eposta">E-posta</label>
+      <input id="giris-eposta" type="email" autocomplete="username" placeholder="hoca@ornek.com" />
+      <label for="giris-sifre">Parola</label>
+      <input id="giris-sifre" type="password" autocomplete="current-password" placeholder="••••••" />
+      <button type="submit" class="giris-btn" id="giris-btn">Giriş yap</button>
+      <div class="giris-durum" id="giris-durum"></div>
+    </form>
+  </div>
+
+  <!-- Panel -->
+  <div class="yon-sarmalayici gizli" id="panel">
+    <header class="ust-bar">
+      <div class="logo">PyHome<span class="nokta">.</span><span class="yon-etiket">Yönetici</span></div>
+      <div class="bosluk"></div>
+      <a class="dugme" href="index.html" title="Öğrenci arayüzüne dön">← Öğrenci arayüzü</a>
+      <div class="kullanici" id="kullanici">
+        <span class="kullanici-ad" id="kullanici-ad"></span>
+        <button class="dugme cikis" id="btn-cikis" title="Çıkış yap">Çıkış</button>
+      </div>
+    </header>
+
+    <nav class="yon-sekmeler">
+      <button class="yon-sekme aktif" data-sekme="odevler">Ödevler</button>
+      <button class="yon-sekme" data-sekme="gruplar">Gruplar</button>
+      <button class="yon-sekme" data-sekme="ogrenciler">Öğrenciler</button>
+      <button class="yon-sekme" data-sekme="gonderimler">Gönderimler</button>
+      <button class="yon-sekme" data-sekme="rapor">Rapor</button>
+    </nav>
+
+    <main class="yon-icerik">
+      <!-- Ödevler -->
+      <section class="yon-panel aktif" data-panel="odevler">
+        <div class="yon-panel-ust">
+          <h2>Ödev Yönetimi</h2>
+          <button class="dugme" id="btn-odev-yenile">↺ Yenile</button>
+        </div>
+        <p class="yon-not">Bir ödevi öğrencilere göstermek için <strong>Aktif</strong> kutusunu işaretleyip <strong>Kaydet</strong>'e basın. <strong>Son teslim</strong> boş bırakılırsa süre sınırsız olur; geçince çözümler açılır. Değişiklik her satırda ayrı kaydedilir.</p>
+        <div class="yon-durum" id="odevler-durum"></div>
+        <div class="yon-tablo-sar"><table class="yon-tablo" id="odevler-tablo">
+          <thead><tr><th>Ödev</th><th>Versiyon</th><th>Başlık</th><th>Aktif</th><th>Son teslim</th><th>Deneme limiti</th><th></th></tr></thead>
+          <tbody><tr><td colspan="7" class="yon-bos">Yükleniyor…</td></tr></tbody>
+        </table></div>
+      </section>
+
+      <!-- Gruplar -->
+      <section class="yon-panel" data-panel="gruplar">
+        <div class="yon-panel-ust">
+          <h2>Grup → Versiyon Ataması</h2>
+          <button class="dugme" id="btn-grup-yenile">↺ Yenile</button>
+        </div>
+        <p class="yon-not">Her grubun her ödevde hangi versiyonu (1/2/3) çözeceğini burada atarsınız. Bir ödev, ilgili grup+versiyon ataması olmadan <strong>aktif</strong> olsa bile o gruba görünmez.</p>
+        <form class="yon-form-satir" id="grup-form">
+          <input type="text" id="grup-grup" placeholder="Grup (örn. A)" required />
+          <select id="grup-odev" required></select>
+          <select id="grup-versiyon" required></select>
+          <button type="submit" class="dugme gonder">Ata / Güncelle</button>
+        </form>
+        <div class="yon-durum" id="gruplar-durum"></div>
+        <div class="yon-tablo-sar"><table class="yon-tablo" id="gruplar-tablo">
+          <thead><tr><th>Grup</th><th>Ödev</th><th>Versiyon</th><th></th></tr></thead>
+          <tbody><tr><td colspan="4" class="yon-bos">Yükleniyor…</td></tr></tbody>
+        </table></div>
+      </section>
+
+      <!-- Öğrenciler -->
+      <section class="yon-panel" data-panel="ogrenciler">
+        <div class="yon-panel-ust">
+          <h2>Öğrenciler</h2>
+          <button class="dugme" id="btn-ogrenci-yenile">↺ Yenile</button>
+        </div>
+        <p class="yon-not">Yeni öğrenci eklemek için Supabase SQL Editor'da <code>ogrenci_ekle(okul_no, ad, grup, pin)</code> çalıştırılır (bkz. <code>supabase/05_ogrenci_ekle.sql</code>) — bu panelden yapılamaz. Burada mevcut öğrencilerin <strong>grubunu</strong> değiştirebilir ve <strong>PIN sıfırlayabilirsiniz</strong>.</p>
+        <input type="search" id="ogrenci-ara" class="yon-arama" placeholder="Okul no veya ada göre ara…" />
+        <div class="yon-durum" id="ogrenciler-durum"></div>
+        <div class="yon-tablo-sar"><table class="yon-tablo" id="ogrenciler-tablo">
+          <thead><tr><th>Okul No</th><th>Ad</th><th>Grup</th><th>Yeni PIN</th><th></th></tr></thead>
+          <tbody><tr><td colspan="5" class="yon-bos">Yükleniyor…</td></tr></tbody>
+        </table></div>
+      </section>
+
+      <!-- Gönderimler -->
+      <section class="yon-panel" data-panel="gonderimler">
+        <div class="yon-panel-ust">
+          <h2>Gönderimler</h2>
+          <button class="dugme" id="btn-gonderim-yenile">↺ Yenile</button>
+        </div>
+        <div class="yon-filtre-satir">
+          <select id="gonderim-odev-filtre"><option value="">Tüm ödevler</option></select>
+          <input type="search" id="gonderim-ogrenci-filtre" placeholder="Okul no ile filtrele…" />
+        </div>
+        <div class="yon-durum" id="gonderimler-durum"></div>
+        <div class="yon-tablo-sar"><table class="yon-tablo" id="gonderimler-tablo">
+          <thead><tr><th>Tarih</th><th>Öğrenci</th><th>Grup</th><th>Ödev</th><th>Soru</th><th>Deneme</th><th>Puan</th><th></th></tr></thead>
+          <tbody><tr><td colspan="8" class="yon-bos">Yükleniyor…</td></tr></tbody>
+        </table></div>
+      </section>
+
+      <!-- Rapor -->
+      <section class="yon-panel" data-panel="rapor">
+        <div class="yon-panel-ust">
+          <h2>Soru Bazlı Başarı Raporu</h2>
+          <div class="yon-panel-ust-btnler">
+            <button class="dugme" id="btn-rapor-yenile">↺ Yenile</button>
+            <button class="dugme gonder" id="btn-excel">⬇ Excel'e aktar</button>
+          </div>
+        </div>
+        <p class="yon-not">Her öğrencinin <strong>son gönderimi</strong> puanlanan gönderim sayılır (birden fazla deneme yapan öğrencinin yalnızca son denemesi rapora girer) — sistemin puanlama kuralıyla birebir.</p>
+        <div class="yon-filtre-satir">
+          <select id="rapor-odev-filtre"><option value="">Tüm ödevler</option></select>
+        </div>
+        <div class="yon-durum" id="rapor-durum"></div>
+        <div class="yon-tablo-sar"><table class="yon-tablo" id="rapor-tablo">
+          <thead><tr><th>Ödev</th><th>Soru</th><th>Gönderen öğrenci</th><th>Ortalama puan</th><th>Tam puan %</th><th>Sıfır puan %</th></tr></thead>
+          <tbody><tr><td colspan="6" class="yon-bos">Yükleniyor…</td></tr></tbody>
+        </table></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Kod/çıktı görüntüleme modalı -->
+  <div class="yon-modal gizli" id="kod-modal">
+    <div class="yon-modal-kart">
+      <div class="yon-modal-ust"><span id="kod-modal-baslik">Gönderim</span><button class="dugme" id="kod-modal-kapat">✕ Kapat</button></div>
+      <div class="yon-modal-etiket">Kod</div>
+      <pre id="kod-modal-kod" class="yon-kod-blok"></pre>
+      <div class="yon-modal-alt">
+        <div class="yon-modal-etiket">Çıktı</div>
+        <pre id="kod-modal-cikti" class="yon-kod-blok"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kütüphaneler -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- Yapılandırma: öğrenci arayüzüyle aynı proje/anahtar -->
+  <script src="js/supabase_config.js"></script>
+  <script src="js/admin_katman.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

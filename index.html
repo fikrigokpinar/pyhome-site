@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PyHome — Python Ödev Sistemi</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- CodeMirror 5 (kod editörü) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
+</head>
+<body>
+  <!-- Yükleniyor perdesi -->
+  <div class="perde" id="perde">
+    <div class="spinner"></div>
+    <div id="perde-metin">Yükleniyor…</div>
+    <div class="aciklama">İlk açılışta Python ortamı (Pyodide) indirilir (~10-20 sn), sonra anında.</div>
+  </div>
+
+  <!-- Giriş ekranı -->
+  <div class="giris gizli" id="giris">
+    <form class="giris-kart" id="giris-form">
+      <div class="giris-logo">PyHome<span class="nokta">.</span></div>
+      <p class="giris-alt">Python Ödev Sistemi</p>
+      <label for="giris-okulno">Okul numarası</label>
+      <input id="giris-okulno" type="text" inputmode="numeric" autocomplete="username" placeholder="örn. 20230001" />
+      <label for="giris-pin">PIN</label>
+      <input id="giris-pin" type="password" autocomplete="current-password" placeholder="••••••" />
+      <button type="submit" class="giris-btn" id="giris-btn">Giriş yap</button>
+      <div class="giris-durum" id="giris-durum"></div>
+    </form>
+  </div>
+
+  <!-- Üst bar -->
+  <header class="ust-bar">
+    <div class="logo">PyHome<span class="nokta">.</span></div>
+    <div class="odev-sec">
+      <select id="odev-secim" aria-label="Ödev/versiyon seçimi"></select>
+    </div>
+    <div class="bosluk"></div>
+    <div class="durum-rozet">
+      <span class="durum-nokta" id="durum-nokta"></span>
+      <span id="durum-metin">başlatılıyor…</span>
+    </div>
+    <div class="kullanici gizli" id="kullanici">
+      <span class="kullanici-ad" id="kullanici-ad"></span>
+      <button class="dugme cikis" id="btn-cikis" title="Çıkış yap">Çıkış</button>
+    </div>
+  </header>
+
+  <!-- Soru gezgini -->
+  <nav class="soru-serit" id="soru-serit">
+    <span class="etiket">Sorular:</span>
+  </nav>
+
+  <!-- Ana iki panel -->
+  <main class="ana">
+    <!-- Sol: soru -->
+    <section class="sol" id="sol-panel">
+      <div class="soru-ust">
+        <span class="puan-rozet" id="puan-rozet">— puan</span>
+        <span class="deneme-rozet" id="deneme-rozet"></span>
+        <span id="konu-rozetleri"></span>
+      </div>
+      <h1 class="soru-baslik" id="soru-baslik">Soru</h1>
+      <div class="metin" id="soru-metin"></div>
+
+      <div class="ipucu-kutu" id="ipucu-kutu"></div>
+      <div class="cozum-kutu" id="cozum-kutu"></div>
+    </section>
+
+    <!-- Sağ: editör + konsol -->
+    <section class="sag">
+      <div class="arac-cubugu">
+        <span class="dosya-adi" id="dosya-adi">cozum.py</span>
+        <div class="bosluk"></div>
+        <button class="dugme" id="btn-sifirla" title="Başlangıç koduna dön">↺ Sıfırla</button>
+        <button class="dugme calistir" id="btn-calistir">▶ Çalıştır</button>
+        <button class="dugme gonder" id="btn-gonder">✓ Gönder</button>
+      </div>
+
+      <div class="editor-sar">
+        <textarea id="editor"></textarea>
+      </div>
+
+      <div class="alt-bolge">
+        <div class="sekmeler">
+          <button class="sekme aktif" data-sekme="konsol">Konsol</button>
+          <button class="sekme" data-sekme="sonuc">Sonuç <span class="rozet" id="sonuc-rozet" style="display:none"></span></button>
+          <button class="sekme" data-sekme="girdi">Girdiler</button>
+        </div>
+        <div class="sekme-icerik aktif" data-icerik="konsol">
+          <pre id="konsol"><span class="bos">Kodunuzu çalıştırınca çıktı burada görünür.</span></pre>
+        </div>
+        <div class="sekme-icerik" data-icerik="sonuc">
+          <div id="sonuc-alan"><div class="bos-durum">Henüz gönderim yok.<br>Kodunuzu yazıp <strong>Gönder</strong>'e basın; testler çalışır ve puanınızı görürsünüz.</div></div>
+        </div>
+        <div class="sekme-icerik" data-icerik="girdi">
+          <p class="girdi-ipucu">Kodunuz <code>input()</code> kullanıyorsa, her satıra bir girdi yazın. <strong>Çalıştır</strong> bu değerleri sırayla besler. (Gönder'de girdiler testlerden gelir.)</p>
+          <textarea id="girdiler" placeholder="örn.&#10;esra&#10;gökpınar"></textarea>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Kütüphaneler -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+  <!-- Supabase istemcisi (veri + kimlik) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Pyodide ana iş parçacığında YÜKLENMEZ; Web Worker (worker.js) importScripts ile
+       CDN'den kendisi yükler. Bu, öğrenci kodu takılırsa arayüzün kilitlenmesini önler. -->
+  <!-- Gömülü test motoru + worker kaynağı (UYGULAMA MANTIĞI; veri değildir). -->
+  <script src="data/engine.js"></script>
+  <!-- Supabase yapılandırması: supabase_config.ornek.js'i supabase_config.js olarak
+       kopyalayıp URL + anon anahtarı doldurun (bkz. supabase/KURULUM.md). -->
+  <script src="js/supabase_config.js"></script>
+  <!-- Veri/kimlik katmanı + uygulama -->
+  <script src="js/supabase_katman.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
