@@ -149,8 +149,15 @@ html, body {
 .editor-sar { flex: 1 1 55%; min-height: 120px; overflow: hidden; position: relative; }
 .CodeMirror { height: 100% !important; font-family: var(--mono) !important; font-size: 14px; }
 
+/* Editör/konsol arası sürüklenebilir bölücü */
+.bolucu {
+  height: 7px; flex-shrink: 0; cursor: row-resize;
+  background: var(--kenar-koyu);
+}
+.bolucu:hover, .bolucu.aktif { background: #4a5361; }
+
 /* Girdiler + konsol alt bölge */
-.alt-bolge { flex: 1 1 45%; display: flex; flex-direction: column; border-top: 1px solid var(--kenar-koyu); min-height: 150px; }
+.alt-bolge { flex: 1 1 45%; display: flex; flex-direction: column; min-height: 150px; }
 .sekmeler { display: flex; gap: 2px; padding: 6px 10px 0; background: var(--panel-koyu-2); flex-shrink: 0; }
 .sekme {
   padding: 7px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer; border: none;

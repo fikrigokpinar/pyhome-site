@@ -311,7 +311,13 @@
           ? '<span class="bos">(çıktı yok — print() kullandınız mı?)</span>'
           : kacisla(sonuc.stdout);
       } else {
-        el("konsol").innerHTML = `<span class="hata">${kacisla(sonuc.hata)}</span>`;
+        let html = `<span class="hata">${kacisla(sonuc.hata)}</span>`;
+        if (/fazla input\(\) istedi/.test(sonuc.hata || "")) {
+          html += '\n\n<span class="bos">İpucu: Bu kod input() kullanıyor. "Girdiler" sekmesine, ' +
+                  "her input() için bir satır olacak şekilde değerleri yazıp tekrar Çalıştır'a basın. " +
+                  "(Gönder'de buna gerek yok — testler kendi girdilerini kullanır.)</span>";
+        }
+        el("konsol").innerHTML = html;
       }
     } catch (e) {
       el("konsol").innerHTML = `<span class="hata">${kacisla(e.message || String(e))}</span>`;
@@ -524,6 +530,53 @@
     const cikisBtn = el("btn-cikis");
     if (cikisBtn) cikisBtn.addEventListener("click", cikisYap);
     dugmeleriKilitle(true);
+    bolucuKur();
+  }
+
+  // ---------- Editör/konsol bölücüsü (sürükleyerek boyutlandırma) ----------
+  function bolucuKur() {
+    const bolucu = el("bolucu");
+    const editorSar = document.querySelector(".editor-sar");
+    const sag = document.querySelector(".sag");
+    if (!bolucu || !editorSar || !sag) return;
+
+    function uygula(px) {
+      const ust = editorSar.getBoundingClientRect().top;
+      const enFazla = sag.getBoundingClientRect().bottom - ust - 160; // konsola en az ~160px
+      const h = Math.max(90, Math.min(px, enFazla));
+      editorSar.style.flex = "0 0 auto";
+      editorSar.style.height = h + "px";
+      if (editor) editor.refresh();
+      return h;
+    }
+
+    try {
+      const kayitli = parseInt(localStorage.getItem("pyhome_editor_h"), 10);
+      if (kayitli > 0) uygula(kayitli);
+    } catch (_) {}
+
+    window.addEventListener("resize", () => {
+      const h = parseInt(editorSar.style.height, 10);
+      if (h > 0) uygula(h); // pencere küçülünce konsol payını koru
+    });
+
+    bolucu.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      bolucu.classList.add("aktif");
+      document.body.style.cursor = "row-resize";
+      const ust = editorSar.getBoundingClientRect().top;
+      function hareket(ev) { uygula(ev.clientY - ust); }
+      function birak(ev) {
+        document.removeEventListener("mousemove", hareket);
+        document.removeEventListener("mouseup", birak);
+        bolucu.classList.remove("aktif");
+        document.body.style.cursor = "";
+        const h = uygula(ev.clientY - ust);
+        try { localStorage.setItem("pyhome_editor_h", String(h)); } catch (_) {}
+      }
+      document.addEventListener("mousemove", hareket);
+      document.addEventListener("mouseup", birak);
+    });
   }
 
   window.addEventListener("DOMContentLoaded", async () => {
