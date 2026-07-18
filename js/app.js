@@ -304,7 +304,8 @@
     el("konsol").innerHTML = '<span class="bos">Çalışıyor…</span>';
     mesgul = true; dugmeleriKilitle(true); durumAyarla("çalışıyor…", "");
     try {
-      const sonucStr = await istek("calistir", { kod, girdiler });
+      const dosyalar = (sorular[aktif] && sorular[aktif].veri_dosyalari) || [];
+      const sonucStr = await istek("calistir", { kod, girdiler, dosyalar });
       const sonuc = JSON.parse(sonucStr);
       if (sonuc.ok) {
         el("konsol").innerHTML = sonuc.stdout.trim() === ""
@@ -347,7 +348,7 @@
 
     let sonuc = null;
     try {
-      const sonucStr = await istek("puanla", { kod, testler: s.testler });
+      const sonucStr = await istek("puanla", { kod, testler: s.testler, dosyalar: s.veri_dosyalari || [] });
       sonuc = JSON.parse(sonucStr);
     } catch (e) {
       el("sonuc-alan").innerHTML = `<div class="bos-durum">${kacisla(e.message || String(e))}</div>`;

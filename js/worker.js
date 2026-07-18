@@ -65,9 +65,9 @@ self.onmessage = async (e) => {
       self.postMessage({ type: "basladi", id: m.id });
       let sonucStr;
       if (m.type === "calistir") {
-        sonucStr = calistir_json(m.kod, JSON.stringify(m.girdiler || []));
+        sonucStr = calistir_json(m.kod, JSON.stringify(m.girdiler || []), JSON.stringify(m.dosyalar || []));
       } else {
-        sonucStr = puanla_json(m.kod, JSON.stringify(m.testler || []));
+        sonucStr = puanla_json(m.kod, JSON.stringify(m.testler || []), JSON.stringify(m.dosyalar || []));
       }
       self.postMessage({ type: "sonuc", id: m.id, veri: sonucStr });
       return;

@@ -103,7 +103,7 @@
     const odevIds = odevler.map((o) => o.id);
     const { data: sorular, error: e2 } = await sb
       .from("questions")
-      .select("id, assignment_id, soru_id, sira, metin_md, baslangic_kodu, puan, ipuclari")
+      .select("id, assignment_id, soru_id, sira, metin_md, baslangic_kodu, puan, ipuclari, veri_dosyalari")
       .in("assignment_id", odevIds)
       .order("sira");
     if (e2) throw new Error(cevirHata(e2.message));

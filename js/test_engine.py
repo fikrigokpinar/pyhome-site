@@ -17,7 +17,10 @@ import builtins
 import contextlib
 import io
 import json
+import os
 import re
+import shutil
+import tempfile
 
 
 class GirdiTukendi(Exception):
@@ -50,11 +53,32 @@ def sayilari_cikar(s: str):
     return sonuc
 
 
-def kodu_calistir(kod: str, girdiler=None):
+def kodu_calistir(kod: str, girdiler=None, dosyalar=None):
     """Verilen Python kodunu çalıştırır; input() çağrılarını girdiler listesinden
     sırayla besler (prompt metni çıktıya yazılmaz, bu yüzden çıktıdan sayılmaz).
     stdout'u yakalar. Dönüş: (stdout_metni, namespace_sozlugu)
+
+    dosyalar: sorunun veri dosyaları — [{"ad": "veri.csv", "icerik": "..."}].
+    Verilirse geçici bir klasöre yazılır ve kod o klasörde çalıştırılır; böylece
+    öğrenci kodu pd.read_csv("veri.csv") ile dosyayı bulur. dosyalar boşsa
+    davranış eskisiyle BİREBİR aynıdır (mevcut soruların paritesi bozulmaz).
     """
+    if dosyalar:
+        onceki = os.getcwd()
+        gecici = tempfile.mkdtemp(prefix="pyhome_soru_")
+        try:
+            os.chdir(gecici)
+            for d in dosyalar:
+                with open(d["ad"], "w", encoding="utf-8") as f:
+                    f.write(d["icerik"])
+            return _kodu_calistir_cekirdek(kod, girdiler)
+        finally:
+            os.chdir(onceki)
+            shutil.rmtree(gecici, ignore_errors=True)
+    return _kodu_calistir_cekirdek(kod, girdiler)
+
+
+def _kodu_calistir_cekirdek(kod: str, girdiler=None):
     girdiler = list(girdiler or [])
     girdi_kuyrugu = iter(girdiler)
 
@@ -106,7 +130,7 @@ def deger_karsilastir(alinan, beklenen, tolerans):
     return alinan == beklenen
 
 
-def test_calistir(test, kod):
+def test_calistir(test, kod, dosyalar=None):
     """Tek bir testi çalıştırır. Başarılıysa (True, "") döner, aksi halde (False, hata_mesaji)."""
     tip = test["tip"]
     tolerans = test.get("tolerans", 0.01)
@@ -125,7 +149,7 @@ def test_calistir(test, kod):
             return False, test.get("hata_mesaji", f"Kodda '{desen}' deseni bulunmamalıydı.")
 
         girdiler = test.get("girdiler", [])
-        stdout, namespace = kodu_calistir(kod, girdiler)
+        stdout, namespace = kodu_calistir(kod, girdiler, dosyalar)
 
         if tip == "stdout_esit":
             if normalize(stdout) == normalize(test["beklenen"]):
@@ -204,11 +228,11 @@ def test_calistir(test, kod):
 # Arayüzün (app.js) çağırdığı üst düzey fonksiyonlar
 # ----------------------------------------------------------------------------
 
-def calistir(kod: str, girdiler=None):
+def calistir(kod: str, girdiler=None, dosyalar=None):
     """'Çalıştır' düğmesi: kodu çalıştırır, çıktıyı veya hata metnini döndürür.
     Dönüş sözlüğü: {ok, stdout, hata}."""
     try:
-        stdout, _ = kodu_calistir(kod, girdiler)
+        stdout, _ = kodu_calistir(kod, girdiler, dosyalar)
         return {"ok": True, "stdout": stdout, "hata": ""}
     except GirdiTukendi as e:
         return {"ok": False, "stdout": "", "hata": str(e)}
@@ -216,14 +240,14 @@ def calistir(kod: str, girdiler=None):
         return {"ok": False, "stdout": "", "hata": f"{type(e).__name__}: {e}"}
 
 
-def puanla(kod: str, testler):
+def puanla(kod: str, testler, dosyalar=None):
     """'Gönder' düğmesi: tüm testleri koşturur; ağırlıklı puan oranını ve test
     bazlı geri bildirimi döndürür.
     Dönüş: {oran (0..1), sonuclar: [{tip, gecti, mesaj, agirlik}, ...]}."""
     sonuclar = []
     kazanilan = 0.0
     for test in testler:
-        gecti, mesaj = test_calistir(test, kod)
+        gecti, mesaj = test_calistir(test, kod, dosyalar)
         agirlik = test.get("agirlik", 0)
         if gecti:
             kazanilan += agirlik
@@ -239,11 +263,13 @@ def puanla(kod: str, testler):
 
 
 # JSON köprüsü — Pyodide'den çağırmak en güvenlisi JSON string alışverişi yapmak.
-def calistir_json(kod: str, girdiler_json: str) -> str:
+def calistir_json(kod: str, girdiler_json: str, dosyalar_json: str = "") -> str:
     girdiler = json.loads(girdiler_json) if girdiler_json else []
-    return json.dumps(calistir(kod, girdiler))
+    dosyalar = json.loads(dosyalar_json) if dosyalar_json else []
+    return json.dumps(calistir(kod, girdiler, dosyalar))
 
 
-def puanla_json(kod: str, testler_json: str) -> str:
+def puanla_json(kod: str, testler_json: str, dosyalar_json: str = "") -> str:
     testler = json.loads(testler_json)
-    return json.dumps(puanla(kod, testler))
+    dosyalar = json.loads(dosyalar_json) if dosyalar_json else []
+    return json.dumps(puanla(kod, testler, dosyalar))
