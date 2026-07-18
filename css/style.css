@@ -143,6 +143,7 @@ html, body {
 .dugme:hover:not(:disabled) { border-color: #4a5361; background: #2f3542; }
 .dugme:disabled { opacity: .45; cursor: default; }
 .dugme.calistir { color: #cfe9ff; }
+.dugme.kontrol { color: #ffe9b8; }
 .dugme.gonder { background: var(--marka); border-color: var(--marka); color: #fff; }
 .dugme.gonder:hover:not(:disabled) { background: var(--marka-koyu); border-color: var(--marka-koyu); }
 

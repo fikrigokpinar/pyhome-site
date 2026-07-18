@@ -378,6 +378,27 @@
     }
   }
 
+  // ---------- Kontrol Et (deneme hakkı HARCAMAZ, kayda geçmez) ----------
+  async function kontrolEt() {
+    if (mesgul || !workerHazir) return;
+    const s = sorular[aktif];
+    const kod = editor.getValue();
+    kaydetAktifKod();
+    sekmeSec("sonuc");
+    el("sonuc-alan").innerHTML = '<div class="bos-durum">Testler deneniyor (hak harcanmaz)…</div>';
+    mesgul = true; dugmeleriKilitle(true); durumAyarla("kontrol ediliyor…", "");
+    try {
+      const sonucStr = await istek("puanla", { kod, testler: s.testler, dosyalar: s.veri_dosyalari || [] });
+      const sonuc = JSON.parse(sonucStr);
+      sonucGoster(s, sonuc, true);
+    } catch (e) {
+      el("sonuc-alan").innerHTML = `<div class="bos-durum">${kacisla(e.message || String(e))}</div>`;
+    } finally {
+      mesgul = false;
+      if (workerHazir) { dugmeleriKilitle(false); durumAyarla("hazır", "hazir"); }
+    }
+  }
+
   function gonderimNotu(metin, sinif) {
     const not = el("gonderim-notu");
     if (!not) return;
@@ -385,7 +406,7 @@
     not.className = "gonderim-notu " + (sinif || "");
   }
 
-  function sonucGoster(s, sonuc) {
+  function sonucGoster(s, sonuc, onKontrol) {
     const puan = Math.round(sonuc.oran * s.puan * 100) / 100;
     const yuzde = Math.round(sonuc.oran * 100);
     let sinif = "sifir", baslik = "Testler geçilemedi";
@@ -395,8 +416,13 @@
     let html = `<div class="sonuc-ozet ${sinif}">
       <span class="buyuk">${puan} / ${s.puan}</span>
       <span>puan · ${baslik} (%${yuzde})</span>
-    </div>
-    <div class="gonderim-notu" id="gonderim-notu"></div>`;
+    </div>`;
+    if (onKontrol) {
+      html += '<div class="gonderim-notu uyari">☑ Bu bir ÖN KONTROLDÜ — puan kaydedilmedi, ' +
+              "deneme hakkı harcanmadı. Teslim etmek için Gönder'e basın.</div>";
+    } else {
+      html += '<div class="gonderim-notu" id="gonderim-notu"></div>';
+    }
 
     sonuc.sonuclar.forEach((r, i) => {
       const gecti = r.gecti;
@@ -526,6 +552,8 @@
       },
     });
     el("btn-calistir").addEventListener("click", calistir);
+    const kontrolBtn = el("btn-kontrol");
+    if (kontrolBtn) kontrolBtn.addEventListener("click", kontrolEt);
     el("btn-gonder").addEventListener("click", gonder);
     el("btn-sifirla").addEventListener("click", sifirla);
     const cikisBtn = el("btn-cikis");
