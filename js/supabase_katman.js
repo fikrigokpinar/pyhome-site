@@ -143,6 +143,7 @@
         baslangic_kodu: s.baslangic_kodu || "",
         puan: Number(s.puan),
         ipuclari: s.ipuclari || [],
+        veri_dosyalari: s.veri_dosyalari || [],
         testler: testMap[s.id] || [],
         _denemeKullanilan: denemeMap[s.id] || 0,
       }));
