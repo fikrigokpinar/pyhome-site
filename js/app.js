@@ -184,7 +184,7 @@
   }
 
   function seridiCiz() {
-    const serit = el("soru-serit");
+    const serit = $(".sorular");
     serit.querySelectorAll(".soru-btn").forEach((n) => n.remove());
     sorular.forEach((s, i) => {
       const b = document.createElement("button");
@@ -625,5 +625,315 @@
     try { s = await SB.oturum(); } catch (_) {}
     if (s) await basla();
     else girisEkraniGoster();
+  });
+})();
+
+
+/* ============================================================================
+ * EK KATMAN — Gönderim geri yükleme · taslak kaydı · deadline bilgisi
+ * ============================================================================
+ *
+ * Bu blok, yukarıdaki koda HİÇ dokunulmadan dosyanın sonuna eklenmiştir; ana kod
+ * değişmedi. Silinirse uygulama eski haliyle çalışır. Geçici kapatmak için
+ * sayfada window.PYHOME_EK_KAPALI = true tanımlamak yeterlidir.
+ *
+ * SORUN
+ *   Gönderilen ödev, sayfa yenilenince ya da başka cihazdan girilince görünmüyordu.
+ *   "Gönder" kaydı Supabase'e yazıyordu (gonder() RPC) ama sayfa açılırken geri
+ *   okunmuyordu; kod ve ✓ işareti yalnızca bellekte (soruDurum / ogrenciKod) duruyordu.
+ *
+ * NE YAPAR
+ *   1. SUNUCU (asıl çözüm, cihazlar arası): Giriş sonrası öğrencinin KENDİ gönderimlerini
+ *      submissions tablosundan okur (RLS yalnızca kendi satırlarını döndürür). Son
+ *      gönderilen kod editöre yüklenir, soru şeridine ✓ / ◑ / ✗ işareti konur.
+ *   2. YEREL (yedek + taslak): Yazılan kod localStorage'a kaydedilir. Sunucu okunamazsa
+ *      yedek olarak kullanılır; gönderilmemiş taslak yalnızca burada durur (cihaza özgü).
+ *   3. BİLGİ KUTUSU: Soru metninin üstünde "Son teslim" (kalan süre) ve "Kayıtlı gönderim"
+ *      bilgisi gösterilir.
+ *
+ * YEREL KAYIT ANAHTARLARI
+ *   pyhome:ek:v1:<okul_no>:<taslak|son>:<soru_dbId>
+ *   Anahtar öğrenci numarasını içerir; böylece aynı tarayıcıda başka hesapla girilince
+ *   önceki öğrencinin kodu arayüzde görünmez. (Güvenlik sınırı DEĞİLDİR: tarayıcı
+ *   araçlarıyla localStorage okunabilir. Amaç arayüzden yanlışlıkla görünmesini önlemek.)
+ *
+ * ANA KODA DOKUNMADAN NASIL BAĞLANIR
+ *   - window.SB.veriYukle ve window.SB.gonder sarılır. Ana kod bunları her seferinde
+ *     SB.<ad>() diye çağırdığı için sarmalayıcılar devreye girer; dönüş değeri ve
+ *     hatalar aynen iletilir.
+ *   - #soru-baslik ve #soru-serit MutationObserver ile izlenir: ana kod soruyu çizince
+ *     kod geri yüklenir, bilgi kutusu ve işaretler güncellenir.
+ *   - Editör, .CodeMirror elemanındaki CodeMirror örneği üzerinden okunur/yazılır.
+ *
+ * BİLİNEN SINIRLAR
+ *   - Sunucudan okuma, öğrencinin submissions tablosunda SELECT yetkisi (RLS) olmasına
+ *     bağlıdır. Okunamazsa kutuda uyarı çıkar ve yerel yedek kullanılır.
+ *   - "Son teslim" gösterimi yalnızca bilgi amaçlıdır; asıl kontrolü sunucudaki gonder() yapar.
+ *   - Ana koddaki ✓ işareti, kayıt başarısız olsa bile yerel puanla çıkar; bu blok bunu
+ *     değiştirmez. Bilgi kutusu ise yalnızca KAYITLI gönderimi gösterir.
+ */
+(() => {
+  "use strict";
+  if (window.PYHOME_EK_KAPALI) return;
+
+  const ONEK = "pyhome:ek:v1:";
+  const $id = (s) => document.getElementById(s);
+  const uyar = (...a) => console.warn("[PyHome ek katman]", ...a);
+
+  let veri = {};           // SB.veriYukle() çıktısı: ödev anahtarı -> {sorular, _deadline, ...}
+  let okulNo = null;       // oturumdaki öğrencinin okul numarası (yerel anahtarlar için)
+  let sunucuOkundu = null; // submissions sunucudan okunabildi mi? (true / false / henüz denenmedi: null)
+  let bekleyen = null;     // kaydedilmeyi bekleyen taslak: {dbId, kod}
+  let zamanlayici = null;
+
+  // ---------- Yerel kayıt (öğrenci numarasına göre ayrık) ----------
+  function anahtar(tur, dbId) { return `${ONEK}${okulNo}:${tur}:${dbId}`; }
+
+  function oku(tur, dbId) {
+    if (!okulNo) return null;
+    try { return JSON.parse(localStorage.getItem(anahtar(tur, dbId))); } catch (_) { return null; }
+  }
+
+  function yaz(tur, dbId, deger) {
+    if (!okulNo) return; // kimlik belli değilse ortak anahtara yazma
+    try { localStorage.setItem(anahtar(tur, dbId), JSON.stringify(deger)); } catch (_) {}
+  }
+
+  // ---------- Kimlik + sunucudan önceki gönderimleri okuma ----------
+  async function oturumuAl() {
+    const s = await SB.oturum();
+    const eposta = s && s.user && s.user.email;
+    okulNo = eposta ? String(eposta).split("@")[0] : null; // "<okulno>@okul.local"
+    return s;
+  }
+
+  async function sunucuGonderimleri(oturum, dbIdler) {
+    const url = `${window.SUPABASE_URL}/rest/v1/submissions` +
+      `?select=question_id,kod,oran,deneme_no,created_at` +
+      `&question_id=in.(${dbIdler.join(",")})&order=deneme_no.asc`;
+    const r = await fetch(url, {
+      headers: { apikey: window.SUPABASE_ANON, Authorization: "Bearer " + oturum.access_token },
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }
+
+  async function gonderimleriYukle(oturum) {
+    const dbIdler = Object.values(veri)
+      .flatMap((o) => o.sorular.map((s) => Number(s._dbId)))
+      .filter((n) => Number.isFinite(n));
+    if (!dbIdler.length) return;
+    try {
+      const satirlar = await sunucuGonderimleri(oturum, dbIdler);
+      sunucuOkundu = true;
+      const son = {};
+      satirlar.forEach((r) => { son[r.question_id] = r; }); // deneme_no artan: sonuncu en yeni
+      Object.keys(son).forEach((id) => {
+        const r = son[id];
+        yaz("son", id, { kod: r.kod, oran: Number(r.oran), deneme_no: r.deneme_no, tarih: Date.parse(r.created_at) });
+      });
+    } catch (e) {
+      sunucuOkundu = false;
+      uyar("Önceki gönderimler sunucudan okunamadı, yerel yedek kullanılacak:", e.message || e);
+    }
+  }
+
+  // ---------- Ana koda dokunmadan SB'ye bağlanma ----------
+  function yuklemeyiSar() {
+    const orijinal = SB.veriYukle;
+    SB.veriYukle = async function () {
+      const v = await orijinal.apply(this, arguments);
+      try {
+        veri = v || {};
+        const oturum = await oturumuAl();
+        if (oturum) await gonderimleriYukle(oturum);
+      } catch (e) { uyar("Geri yükleme atlandı:", e); }
+      return v; // ana koda dönen değer değişmez
+    };
+  }
+
+  function gonderiyiSar() {
+    const orijinal = SB.gonder;
+    SB.gonder = async function (dbId, kod, cikti, oran) {
+      const r = await orijinal.apply(this, arguments); // hata fırlatırsa aynen yukarı gider
+      try {
+        yaz("son", dbId, { kod, oran: Number(oran), deneme_no: r && r.deneme_no, tarih: Date.now() });
+        bilgiyiCiz();
+        seridiIsaretle();
+      } catch (e) { uyar(e); }
+      return r;
+    };
+  }
+
+  // ---------- Aktif ödev / soru (ana kodun DOM durumundan) ----------
+  function aktifOdev() {
+    const sec = $id("odev-secim");
+    return sec ? veri[sec.value] || null : null;
+  }
+
+  function aktifSoru() {
+    const o = aktifOdev();
+    const b = $id("soru-baslik");
+    const n = b ? parseInt(b.textContent.replace(/\D/g, ""), 10) : NaN; // "Soru 3" -> 3
+    return o && n ? o.sorular[n - 1] || null : null;
+  }
+
+  function editor() {
+    const e = document.querySelector(".CodeMirror");
+    return e && e.CodeMirror ? e.CodeMirror : null;
+  }
+
+  // ---------- Bilgi kutusu: deadline + kayıtlı gönderim ----------
+  function bilgiKutusu() {
+    let k = $id("ek-bilgi");
+    if (!k) {
+      const soru_serit = $id("soru-serit");
+      if (!soru_serit || !soru_serit.parentNode) return null;
+      k = document.createElement("div");
+      k.id = "ek-bilgi";
+      soru_serit.appendChild(k);
+    }
+    return k;
+  }
+
+  function satir(kutu, metin, sinif) {
+    const d = document.createElement("div");
+    d.className = "gonderim-notu " + (sinif || "");
+    d.textContent = metin;
+    kutu.appendChild(d);
+  }
+
+  function tarihYaz(ms) {
+    return new Date(ms).toLocaleString("tr-TR", { dateStyle: "medium", timeStyle: "short" });
+  }
+
+  function kalanSure(deadline) {
+    const ms = Date.parse(deadline) - Date.now();
+    if (isNaN(ms)) return null;
+    if (ms <= 0) return { metin: "süre doldu", acil: true };
+    const dk = Math.floor(ms / 60000);
+    const gun = Math.floor(dk / 1440);
+    const saat = Math.floor((dk % 1440) / 60);
+    const metin = gun > 0 ? `${gun} gün ${saat} saat kaldı`
+      : saat > 0 ? `${saat} saat ${dk % 60} dk kaldı` : `${dk} dk kaldı`;
+    return { metin, acil: ms < 24 * 3600 * 1000 }; // son 24 saat vurgulanır
+  }
+
+  function bilgiyiCiz() {
+    const kutu = bilgiKutusu();
+    const o = aktifOdev();
+    const s = aktifSoru();
+    if (!kutu) return;
+    kutu.textContent = "";
+    if (!o || !s) return;
+
+    const k = o._deadline ? kalanSure(o._deadline) : null;
+    if (k) satir(kutu, `Son teslim: ${tarihYaz(Date.parse(o._deadline))} · ${k.metin}`, k.acil ? "uyari" : "");
+
+    const son = oku("son", s._dbId);
+    if (son) {
+      satir(kutu, `✓ Kayıtlı gönderim: deneme ${son.deneme_no} · %${Math.round(son.oran * 100)} · ${tarihYaz(son.tarih)}`, "ok");
+    } else {
+      satir(kutu, "Bu soru için kayıtlı gönderim yok.", "");
+    }
+    if (sunucuOkundu === false) {
+      satir(kutu, "Sunucudaki önceki gönderimler okunamadı; yalnızca bu cihazdaki kayıtlar gösteriliyor.", "uyari");
+    }
+  }
+
+  // Soru şeridi: ana kod işaret koymadıysa kayıtlı gönderime göre ✓ / ◑ / ✗ ekler
+  function seridiIsaretle() {
+    const o = aktifOdev();
+    if (!o) return;
+    document.querySelectorAll("#soru-serit .soru-btn").forEach((b, i) => {
+      const s = o.sorular[i];
+      if (!s || b.querySelector(".imge")) return; // ana kod zaten işaretlemiş
+      const son = oku("son", s._dbId);
+      if (!son) return;
+      let imge = "✗";
+      if (son.oran >= 0.999) { b.classList.add("tamam"); imge = "✓"; }
+      else if (son.oran > 0) { b.classList.add("kismi"); imge = "◑"; }
+      const sp = document.createElement("span");
+      sp.className = "imge";
+      sp.textContent = imge;
+      b.appendChild(sp);
+    });
+  }
+
+  // ---------- Editör: kodu geri yükleme + taslak kaydı ----------
+  // Ana kod soruyu çizince editöre başlangıç kodunu koyar. Editörde hâlâ başlangıç kodu
+  // varsa (öğrenci bu oturumda yazmadıysa) en yeni kayıtlı kodu (taslak veya son gönderim) yükler.
+  function koduGeriYukle() {
+    const s = aktifSoru();
+    const c = editor();
+    if (!s || !c || c.getValue() !== s.baslangic_kodu) return;
+    const taslak = oku("taslak", s._dbId);
+    const son = oku("son", s._dbId);
+    const adaylar = [
+      taslak && { kod: taslak.kod, t: taslak.t },
+      son && { kod: son.kod, t: son.tarih },
+    ].filter(Boolean).sort((a, b) => (b.t || 0) - (a.t || 0));
+    if (!adaylar.length || adaylar[0].kod === c.getValue()) return;
+    c.setValue(adaylar[0].kod);
+    c.clearHistory();
+  }
+
+  function taslagiKaydet() {
+    clearTimeout(zamanlayici);
+    if (!bekleyen) return;
+    yaz("taslak", bekleyen.dbId, { kod: bekleyen.kod, t: Date.now() });
+    bekleyen = null;
+  }
+
+  function editoruBagla() {
+    const c = editor();
+    if (!c || c.__ekBagli) return;
+    c.__ekBagli = true;
+    c.on("change", (inst, ch) => {
+      if (ch.origin === "setValue") return; // program yüklemesi (soru değişimi, sıfırla), öğrenci yazımı değil
+      const s = aktifSoru();
+      if (!s) return;
+      bekleyen = { dbId: s._dbId, kod: inst.getValue() }; // soru ve kod yazıldığı ANDA yakalanır
+      clearTimeout(zamanlayici);
+      zamanlayici = setTimeout(taslagiKaydet, 700);
+    });
+  }
+
+  // "Sıfırla": ana kod editörü başlangıç koduna döndürür. Eski taslak/son gönderim geri
+  // gelmesin diye başlangıç kodu en yeni taslak olarak kaydedilir.
+  function sifirlaninca() {
+    bekleyen = null;
+    clearTimeout(zamanlayici);
+    const s = aktifSoru();
+    const c = editor();
+    if (s && c) yaz("taslak", s._dbId, { kod: c.getValue(), t: Date.now() });
+  }
+
+  function soruDegisti() {
+    editoruBagla();
+    koduGeriYukle();
+    bilgiyiCiz();
+    seridiIsaretle();
+  }
+
+  // ---------- Başlatma ----------
+  // Ana kodun DOMContentLoaded dinleyicisinden SONRA kaydolur; o, ilk await'inde (oturum
+  // kontrolü) beklerken bu çalışır, yani sarmalayıcılar veriYukle() çağrılmadan önce hazırdır.
+  window.addEventListener("DOMContentLoaded", () => {
+    if (!window.SB) return;
+    yuklemeyiSar();
+    gonderiyiSar();
+
+    const baslik = $id("soru-baslik");
+    const serit = $id("soru-serit");
+    if (baslik) new MutationObserver(soruDegisti).observe(baslik, { childList: true, characterData: true, subtree: true });
+    if (serit) new MutationObserver(seridiIsaretle).observe(serit, { childList: true });
+
+    const sifirla = $id("btn-sifirla");
+    if (sifirla) sifirla.addEventListener("click", sifirlaninca);
+
+    window.addEventListener("pagehide", taslagiKaydet);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) taslagiKaydet(); });
+    setInterval(bilgiyiCiz, 60000); // kalan süre dakikada bir tazelenir
   });
 })();
